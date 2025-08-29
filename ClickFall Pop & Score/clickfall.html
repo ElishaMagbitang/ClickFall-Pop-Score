@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ClickFall — One-File JS Game + Dashboard</title>
+<style>
+  :root{
+    --bg:#0e0f14; --card:#161823; --muted:#8b90a7; --ink:#e9ecf1; --accent:#7c8cff; --accent2:#3dd9b2; --danger:#ff6b7a;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif; color:var(--ink); background:radial-gradient(1200px 800px at 10% -10%, #1b1f33 0%, #0e0f14 55%) fixed;}
+  header{display:flex; gap:12px; align-items:center; justify-content:space-between; padding:16px clamp(16px,4vw,32px)}
+  h1{font-size:clamp(18px,3.5vw,24px); margin:0; letter-spacing:.3px}
+  nav{display:flex; gap:8px}
+  .tabbtn{
+    border:1px solid #2a2d40; background:#141724; color:var(--ink);
+    padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:600;
+  }
+  .tabbtn[aria-selected="true"]{background:linear-gradient(180deg,#1a1f34,#131628); border-color:#3b4060; box-shadow:inset 0 0 0 1px #454b74}
+  main{max-width:1100px; margin:0 auto; padding:0 clamp(16px,4vw,32px) 32px}
+  .panel{display:none}
+  .panel.active{display:block; animation:fade .25s ease}
+  @keyframes fade{from{opacity:.3; transform:translateY(6px)} to{opacity:1; transform:translateY(0)}}
+
+  /* Dashboard */
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:14px}
+  .card{
+    background:linear-gradient(180deg,#15192a,#0f1220);
+    border:1px solid #242842; border-radius:14px; padding:16px;
+  }
+  .muted{color:var(--muted); font-size:13px}
+  .stat{font-size:32px; font-weight:800; letter-spacing:.5px}
+  .row{display:flex; align-items:center; justify-content:space-between; gap:12px}
+  .actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px}
+  .btn{
+    border:1px solid #2a2d40; background:#101324; color:var(--ink); padding:10px 12px; border-radius:10px; cursor:pointer; font-weight:600;
+  }
+  .btn.accent{background:linear-gradient(180deg,#6e7fff,#5e70ff); border-color:#6e7fff; color:#0a0c18}
+  .btn.warn{border-color:#3a1c24; background:linear-gradient(180deg,#2a0f16,#1a0a0f); color:#ffc5cc}
+  .list{margin:0; padding-left:18px}
+  .footnote{margin-top:10px; font-size:12px; color:#9aa0b6}
+
+  /* Game */
+  .gamewrap{
+    margin-top:14px; background:linear-gradient(180deg,#0e1222,#0b0e1a); border:1px solid #242842; border-radius:14px; overflow:hidden;
+  }
+  .hud{
+    display:flex; gap:10px; align-items:center; justify-content:space-between;
+    padding:12px 14px; background:linear-gradient(180deg,#12162b,#0d1022); border-bottom:1px solid #242842;
+  }
+  .hud .pill{
+    padding:6px 10px; border-radius:999px; border:1px solid #2b2f4c; background:#12162b; font-size:13px;
+  }
+  canvas{display:block; width:100%; height:58vh; max-height:560px; background:
+    radial-gradient(600px 300px at 80% -10%, rgba(124,140,255,.08), transparent 60%),
+    #0a0c16;}
+  .overlay{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none;
+  }
+  .center{
+    text-align:center; backdrop-filter: blur(6px); background:rgba(10,12,22,.35); border:1px solid #2b2f4c; padding:18px; border-radius:14px;
+  }
+  .big{font-size:18px; font-weight:700}
+  .kbd{font-family:ui-monospace,Menlo,Consolas,monospace; background:#0d1022; border:1px solid #2b2f4c; padding:2px 8px; border-radius:8px}
+  .spacer{height:8px}
+  .small{font-size:12px; color:#a3a8c1}
+  .hidden{display:none}
+  .abs{position:relative}
+</style>
+</head>
+<body>
+  <header>
+    <h1>🎯 ClickFall</h1>
+    <nav role="tablist" aria-label="Views">
+      <button class="tabbtn" role="tab" aria-controls="dashboard" aria-selected="true" id="tab-dashboard">Dashboard</button>
+      <button class="tabbtn" role="tab" aria-controls="game" aria-selected="false" id="tab-game">Play</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- DASHBOARD -->
+    <section id="dashboard" class="panel active" role="tabpanel" aria-labelledby="tab-dashboard">
+      <div class="cards">
+        <div class="card">
+          <div class="row"><div>
+            <div class="muted">High Score</div>
+            <div class="stat" id="statHigh">0</div>
+          </div>
+          <button class="btn accent" id="jumpToGame">Play Now</button></div>
+          <div class="footnote">Beat your personal best by popping as many targets as you can in 60 seconds.</div>
+        </div>
+
+        <div class="card">
+          <div class="muted">Lifetime Stats</div>
+          <ul class="list">
+            <li>Games played: <b id="statGames">0</b></li>
+            <li>Average score: <b id="statAvg">0.0</b></li>
+            <li>Best accuracy: <b id="statAcc">0%</b></li>
+            <li>Last score: <b id="statLast">0</b></li>
+          </ul>
+          <div class="actions">
+            <button class="btn" id="shareStats">Copy Stats</button>
+            <button class="btn warn" id="resetStats">Reset Stats</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="muted">How to Play</div>
+          <ul class="list">
+            <li>Click the falling circles before they hit the bottom.</li>
+            <li>Chain pops quickly for bonus points.</li>
+            <li>Missed clicks lower accuracy; accuracy boosts bonus.</li>
+            <li>Game lasts <b>60s</b>. Good luck!</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- GAME -->
+    <section id="game" class="panel" role="tabpanel" aria-labelledby="tab-game">
+      <div class="gamewrap">
+        <div class="hud">
+          <div class="pill">⏱️ Time: <b id="uiTime">60.0</b>s</div>
+          <div class="pill">🏆 Score: <b id="uiScore">0</b></div>
+          <div class="pill">🎯 Accuracy: <b id="uiAcc">100%</b></div>
+          <div class="pill">🔥 Streak: <b id="uiStreak">0</b></div>
+          <div class="actions">
+            <button class="btn accent" id="btnStart">Start / Restart</button>
+          </div>
+        </div>
+        <div class="abs">
+          <canvas id="board" width="800" height="500" aria-label="Game canvas"></canvas>
+          <div class="overlay" id="overlay">
+            <div class="center">
+              <div class="big">Click to Pop the Falling Targets</div>
+              <div class="spacer"></div>
+              <div class="small">Press <span class="kbd">Start</span> or hit <span class="kbd">Space</span> to begin</div>
+            </div>
+          </div>
+          <div class="overlay hidden" id="gameover">
+            <div class="center">
+              <div class="big">Time!</div>
+              <div class="spacer"></div>
+              <div class="small">Score: <b id="finalScore">0</b> • Accuracy: <b id="finalAcc">0%</b></div>
+              <div class="spacer"></div>
+              <button class="btn accent" id="btnPlayAgain">Click Space</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script>
+(() => {
+  // ---------- Simple stateful storage ----------
+  const STORAGE_KEY = 'clickfall_stats_v1';
+  const defaultStats = { high:0, games:0, total:0, bestAcc:0, last:0 };
+  const loadStats = () => {
+    try { return Object.assign({}, defaultStats, JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')); }
+    catch { return {...defaultStats}; }
+  };
+  const saveStats = (s) => localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  let stats = loadStats();
+
+  // ---------- Tab navigation ----------
+  const panels = {
+    dashboard: document.getElementById('dashboard'),
+    game: document.getElementById('game')
+  };
+  function activate(tab){
+    const btnDash = document.getElementById('tab-dashboard');
+    const btnGame = document.getElementById('tab-game');
+    for (const [name, el] of Object.entries(panels)) {
+      el.classList.toggle('active', name===tab);
+    }
+    btnDash.setAttribute('aria-selected', tab==='dashboard');
+    btnGame.setAttribute('aria-selected', tab==='game');
+  }
+  document.getElementById('tab-dashboard').addEventListener('click', () => { activate('dashboard'); refreshDashboard(); });
+  document.getElementById('tab-game').addEventListener('click', () => activate('game'));
+  document.getElementById('jumpToGame').addEventListener('click', () => { activate('game'); });
+
+  // ---------- Dashboard rendering ----------
+  function refreshDashboard(){
+    stats = loadStats();
+    const avg = stats.games ? (stats.total / stats.games) : 0;
+    document.getElementById('statHigh').textContent = stats.high;
+    document.getElementById('statGames').textContent = stats.games;
+    document.getElementById('statAvg').textContent = avg.toFixed(1);
+    document.getElementById('statAcc').textContent = Math.round(stats.bestAcc*100) + '%';
+    document.getElementById('statLast').textContent = stats.last;
+  }
+  refreshDashboard();
+
+  document.getElementById('resetStats').addEventListener('click', () => {
+    if (!confirm('Reset all stats?')) return;
+    saveStats({...defaultStats});
+    refreshDashboard();
+  });
+
+  document.getElementById('shareStats').addEventListener('click', async () => {
+    const avg = stats.games ? (stats.total / stats.games) : 0;
+    const text = `🎯 ClickFall Stats
+High Score: ${stats.high}
+Games Played: ${stats.games}
+Average Score: ${avg.toFixed(1)}
+Best Accuracy: ${Math.round(stats.bestAcc*100)}%
+Last Score: ${stats.last}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('Stats copied to clipboard!');
+    } catch {
+      prompt('Copy your stats:', text);
+    }
+  });
+
+  // ---------- Game logic ----------
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const over = document.getElementById('gameover');
+  const ui = {
+    time: document.getElementById('uiTime'),
+    score: document.getElementById('uiScore'),
+    acc: document.getElementById('uiAcc'),
+    streak: document.getElementById('uiStreak'),
+  };
+
+  let DPR = window.devicePixelRatio || 1;
+  function fitCanvas(){
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(320, Math.floor(rect.width));
+    const h = Math.max(240, Math.floor(rect.height));
+    DPR = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(w * DPR);
+    canvas.height = Math.floor(h * DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  new ResizeObserver(fitCanvas).observe(canvas);
+  window.addEventListener('orientationchange', () => setTimeout(fitCanvas, 250));
+  fitCanvas();
+
+  const rand = (a,b) => a + Math.random()*(b-a);
+  const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+
+  let running=false, ended=false;
+  let score=0, timeLeft=60, clicks=0, hits=0, streak=0, lastPopAt=0;
+  let targets=[];
+  let lastSpawn=0, spawnEvery=650; // ms baseline
+
+  function resetGame(){
+    running=false; ended=false; score=0; timeLeft=60; clicks=0; hits=0; streak=0; targets=[];
+    spawnEvery=650; lastSpawn=0; lastPopAt=0;
+    ui.score.textContent='0'; ui.time.textContent=timeLeft.toFixed(1); ui.acc.textContent='100%'; ui.streak.textContent='0';
+    overlay.classList.remove('hidden'); over.classList.add('hidden');
+    draw(); // clear
+  }
+
+  function startGame(){
+    resetGame(); // always reset first
+
+    overlay.classList.add('hidden');
+    over.classList.add('hidden');
+    running = true;
+    ended = false;
+    lastTime = performance.now();
+    requestAnimationFrame(tick);
+  }
+
+  document.getElementById('btnStart').addEventListener('click', startGame);
+  document.getElementById('btnPlayAgain').addEventListener('click', startGame);
+  window.addEventListener('keydown', (e)=>{ if(e.code==='Space'){ e.preventDefault(); startGame(); } });
+
+  canvas.addEventListener('mousedown', onClick);
+  canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); const t=e.changedTouches[0]; onClick({clientX:t.clientX, clientY:t.clientY}); }, {passive:false});
+
+  function onClick(e){
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left);
+    const y = (e.clientY - rect.top);
+    clicks++;
+    // hit test from top-most
+    let hitIndex = -1;
+    for (let i = targets.length-1; i>=0; i--){
+      const t = targets[i];
+      const dx = x - t.x;
+      const dy = y - t.y;
+      if (dx*dx + dy*dy <= t.r*t.r){ hitIndex = i; break; }
+    }
+    if (hitIndex>=0){
+      const t = targets[hitIndex];
+      hits++;
+      streak = Math.min(streak+1, 50);
+      const now = performance.now();
+      const quick = (now - lastPopAt) < 600 ? 1 : 0; // small chain bonus
+      lastPopAt = now;
+
+      // score: base by size + speed + streak and accuracy factor
+      const base = Math.round(5 + (18 - t.r*0.12) + t.vy*0.7);
+      const streakBonus = Math.round(streak*0.6 + quick*4);
+      score += base + streakBonus;
+
+      // particle pop
+      particles(t.x, t.y, t.color);
+
+      // remove & slightly ramp difficulty
+      targets.splice(hitIndex,1);
+      spawnEvery = Math.max(260, spawnEvery - 6);
+      ui.score.textContent = String(score);
+      ui.streak.textContent = String(streak);
+    } else {
+      streak = 0;
+      ui.streak.textContent = '0';
+    }
+    const acc = clicks ? Math.round((hits/clicks)*100) : 100;
+    ui.acc.textContent = acc + '%';
+  }
+
+  // Targets & particles
+  function spawnTarget(){
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const r = rand(18, 60);
+    const x = rand(r+4, w - r - 4);
+    const y = -r - 10;
+    const vy = rand(40, 120) / 60; // px per frame at ~60fps
+    const hue = Math.floor(rand(180, 320));
+    const color = `hsl(${hue} 90% 65%)`;
+    targets.push({x,y,r,vy,color});
+  }
+
+  const pops=[];
+  function particles(x,y,color){
+    for (let i=0;i<10;i++){
+      pops.push({
+        x,y, vx:rand(-2,2), vy:rand(-3, -0.5), life:rand(18,28), color
+      });
+    }
+  }
+
+  // Main loop
+  let lastTime = 0;
+  function tick(now){
+    if (!running) return;
+    const dt = Math.min(0.05, (now - lastTime)/1000); // seconds
+    lastTime = now;
+
+    timeLeft -= dt;
+    if (timeLeft <= 0){
+      timeLeft = 0; running=false; ended=true;
+      endGame();
+      return;
+    }
+
+    // spawn
+    if (now - lastSpawn > spawnEvery){
+      lastSpawn = now;
+      // spawn 1-2 targets, more when canvas wide
+      const count = canvas.clientWidth > 700 ? 2 : 1;
+      for(let i=0;i<count;i++) spawnTarget();
+    }
+
+    // update targets
+    const h = canvas.clientHeight;
+    for (let i=targets.length-1; i>=0; i--){
+      const t = targets[i];
+      t.y += t.vy * 60 * dt;
+      if (t.y - t.r > h){
+  // slipped — small streak reset, no score penalty
+    streak = 0; ui.streak.textContent='0';
+    targets.splice(i,1);
+    }
+
+    }
+
+    // update particles
+    for (let i=pops.length-1; i>=0; i--){
+      const p = pops[i];
+      p.x += p.vx * 60 * dt;
+      p.y += p.vy * 60 * dt;
+      p.vy += 0.08 * 60 * dt;
+      p.life -= 60 * dt;
+      if (p.life <= 0) pops.splice(i,1);
+    }
+
+    // draw
+    draw();
+
+    // UI
+    ui.time.textContent = timeLeft.toFixed(1);
+    const acc = clicks ? Math.round((hits/clicks)*100) : 100;
+    ui.acc.textContent = acc + '%';
+
+    requestAnimationFrame(tick);
+  }
+
+  function draw(){
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    ctx.clearRect(0,0,w,h);
+
+    // backdrop subtle grid
+    ctx.globalAlpha = 0.05;
+    const step = 32;
+    ctx.beginPath();
+    for(let x=0;x<w;x+=step){ ctx.moveTo(x,0); ctx.lineTo(x,h); }
+    for(let y=0;y<h;y+=step){ ctx.moveTo(0,y); ctx.lineTo(w,y); }
+    ctx.strokeStyle = '#b3b8ff'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // targets
+    for (const t of targets){
+      const grd = ctx.createRadialGradient(t.x - t.r*0.3, t.y - t.r*0.3, t.r*0.2, t.x, t.y, t.r);
+      grd.addColorStop(0, 'rgba(255,255,255,0.9)');
+      grd.addColorStop(0.15, t.color);
+      grd.addColorStop(1, 'rgba(10,12,22,0.8)');
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, t.r, 0, Math.PI*2);
+      ctx.fill();
+
+      // rim
+      ctx.strokeStyle='rgba(255,255,255,.15)';
+      ctx.lineWidth=2; ctx.stroke();
+    }
+
+    // particles
+    for (const p of pops){
+      ctx.globalAlpha = clamp(p.life/28, 0, 1);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.2, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function endGame(){
+    draw();
+    const acc = clicks ? (hits/clicks) : 1;
+    ui.acc.textContent = Math.round(acc*100) + '%';
+    document.getElementById('finalScore').textContent = String(score);
+    document.getElementById('finalAcc').textContent = Math.round(acc*100) + '%';
+
+    // persist
+    stats = loadStats();
+    stats.games += 1;
+    stats.total += score;
+    stats.last = score;
+    if (score > stats.high) stats.high = score;
+    if (acc > stats.bestAcc) stats.bestAcc = acc;
+    saveStats(stats);
+
+    // show overlays & update dashboard for next time
+    over.classList.remove('hidden');
+    refreshDashboard();
+  }
+
+  // Kick off with clean board
+  resetGame();
+})();
+</script>
+</body>
+</html>
