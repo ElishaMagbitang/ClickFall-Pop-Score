@@ -42,5 +42,9 @@ A fun browser-based mini game where you test your reflexes and accuracy by press
 * **CSS3** for styling
 * **JavaScript (Vanilla)** for game logic
 
+Preview Image
+-----
+![Preview Image](clickfall.png)
+
 ---
 
